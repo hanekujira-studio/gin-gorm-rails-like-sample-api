@@ -30,6 +30,13 @@ func Router() *gin.Engine {
 		apiv1.POST("/books", bookCtrl.CreateBook)
 		apiv1.PUT("/books/:id", bookCtrl.UpdateBook)
 		apiv1.DELETE("/books/:id", bookCtrl.DeleteBook)
+
+		foodCtrl := controller.FoodController{}
+		apiv1.GET("/foods", foodCtrl.IndexFood)
+		apiv1.GET("/foods/:id", foodCtrl.ShowFood)
+		apiv1.POST("/foods", foodCtrl.CreateFood)
+		apiv1.PUT("/foods/:id", foodCtrl.UpdateFood)
+		apiv1.DELETE("/foods/:id", foodCtrl.DeleteFood)
 	}
 	return r
 }

@@ -42,4 +42,5 @@ func Close() {
 func autoMigration() {
 	Db.AutoMigrate(&entity.Shop{})
 	Db.AutoMigrate(&entity.Book{})
+	Db.AutoMigrate(&entity.Food{})
 }

@@ -35,3 +35,21 @@ func convertToViewBook(before *entity.Book) bookWithRank {
 		Rank:            before.Rank(),
 	}
 }
+
+func convertToViewFoods(before []*entity.Food) []foodWithHealthiness {
+	after := make([]foodWithHealthiness, len(before))
+	for i, p := range before {
+		after[i] = convertToViewFood(p)
+	}
+	return after
+}
+
+func convertToViewFood(before *entity.Food) foodWithHealthiness {
+	return foodWithHealthiness{
+		ID:              before.ID,
+		FoodName:        before.FoodName,
+		FoodDescription: before.FoodDescription,
+		Calories:        before.Calories,
+		Healthiness:     before.Healthiness(),
+	}
+}

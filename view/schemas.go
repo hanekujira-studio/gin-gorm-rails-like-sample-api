@@ -13,3 +13,11 @@ type bookWithRank struct {
 	Sales           uint    `json:"sales"`
 	Rank            *string `json:"rank"`
 }
+
+type foodWithHealthiness struct {
+	ID              uint64  `json:"id"`
+	FoodName        string  `json:"food_name"`
+	FoodDescription string  `json:"food_description"`
+	Calories        uint    `json:"calories"`
+	Healthiness     *string `json:"healthiness"`
+}
