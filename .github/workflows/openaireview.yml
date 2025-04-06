@@ -1,0 +1,49 @@
+name: QA Checklist Generator
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+
+jobs:
+  generate_qa:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+
+      - name: Get PR diff
+        id: diff
+        run: |
+          git fetch master ${{ github.event.pull_request.base.ref }}
+          git diff master/${{ github.event.pull_request.base.ref }} > diff.txt
+          echo "::set-output name=diff_content::$(cat diff.txt)"
+
+      - name: Generate QA checklist using OpenAI API with curl
+        id: generate
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: |
+          DIFF_CONTENT=$(cat diff.txt)
+          
+          # プロンプトの構築
+          QA_FORMAT="# QA表\n\n| No. | テスト項目 | テスト手順 | 期待結果 | 結果 |\n|-----|------------|----------|------------|----------|\n| 1 | ... | ... | ... | □ OK<br>□ NG |"
+          PROMPT="以下はプルリクエストの変更差分です。変更差分の概略を述べて下さい。その後。この差分からQAすべきテスト項目を抽出し、必ず以下のフォーマットに従ってQA表を作成してください。フォーマットを変更せず、内容だけを適切に埋めてください：\n\n${QA_FORMAT}\n\n変更差分:\n${DIFF_CONTENT}"
+
+          RESPONSE=$(curl -s https://api.openai.com/v1/chat/completions \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer $OPENAI_API_KEY" \
+            -d '{
+              "model": "gpt-3.5-turbo",
+              "messages": [{"role": "user", "content": "'"$PROMPT"'"}],
+              "temperature": 0.3
+            }')
+
+          # jqを使ってレスポンスから必要な部分を抽出
+          QA_COMMENT=$(echo "$RESPONSE" | jq -r '.choices[0].message.content')
+          echo "::set-output name=qa_comment::$QA_COMMENT"
+
+      - name: Post QA checklist as PR comment
+        uses: peter-evans/create-or-update-comment@v1
+        with:
+          issue-number: ${{ github.event.pull_request.number }}
+          body: ${{ steps.generate.outputs.qa_comment }}
