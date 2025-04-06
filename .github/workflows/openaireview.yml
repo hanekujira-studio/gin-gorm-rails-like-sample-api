@@ -50,7 +50,7 @@ jobs:
           echo "${{ steps.generate.outputs.qa_comment }}" > qa-reports/qa-checklist-$(date +%Y%m%d-%H%M%S).md
           
       - name: Upload QA checklist
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v4
         with:
           name: qa-checklist
           path: qa-reports/
