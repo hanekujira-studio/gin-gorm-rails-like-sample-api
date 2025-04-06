@@ -27,8 +27,11 @@ def main():
     # errors='replace'は不正なUTF-8シーケンスを置換文字に置き換える
     diff_content = base64.b64decode(diff_b64).decode('utf-8', errors='replace')
     
-    # 差分データを3000バイトに制限（APIの文脈長制限対策）
-    diff_content = diff_content[:3000]
+    # 差分データを10000トークンに制限（APIの文脈長制限対策）
+    # おおよそ英語で1トークンは4文字程度のため、文字数で簡易的に計算
+    max_tokens = 10000
+    estimated_chars = max_tokens * 4
+    diff_content = diff_content[:estimated_chars]
     
     # デバッグ情報を標準エラー出力に出力
     print(f"デコードした差分の長さ: {len(diff_content)} バイト", file=sys.stderr)
