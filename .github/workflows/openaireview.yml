@@ -4,6 +4,10 @@ on:
   pull_request:
     types: [opened, synchronize]
 
+permissions:
+  pull-requests: write
+  contents: read
+
 jobs:
   generate_qa:
     runs-on: ubuntu-latest
@@ -42,15 +46,12 @@ jobs:
 
           # jqを使ってレスポンスから必要な部分を抽出
           QA_COMMENT=$(echo "$RESPONSE" | jq -r '.choices[0].message.content')
-          echo "$QA_COMMENT" > qa_result.txt
-
-      - name: Decode and post QA checklist
-        run: |
-          QA_CONTENT=$(cat qa_result.txt)
-          echo "QA_CONTENT=$QA_CONTENT" >> $GITHUB_ENV
+          echo "qa_comment<<EOF" >> $GITHUB_OUTPUT
+          echo "$QA_COMMENT" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
 
       - name: Post QA checklist as PR comment
         uses: peter-evans/create-or-update-comment@v2
         with:
           issue-number: ${{ github.event.pull_request.number }}
-          body: ${{ env.QA_CONTENT }}
+          body: ${{ steps.generate.outputs.qa_comment }}
