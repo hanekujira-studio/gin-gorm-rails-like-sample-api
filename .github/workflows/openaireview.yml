@@ -12,10 +12,10 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Get PR diff
+      - name: Get commit diff
         id: diff
         run: |
-          git diff ${{ github.event.pull_request.base.sha }} ${{ github.sha }} > diff.txt
+          git diff HEAD^ HEAD > diff.txt
           echo "diff_content=$(cat diff.txt)" >> $GITHUB_OUTPUT
 
       - name: Generate QA checklist using OpenAI API with curl
@@ -27,7 +27,7 @@ jobs:
           
           # プロンプトの構築
           QA_FORMAT="# QA表\n\n| No. | テスト項目 | テスト手順 | 期待結果 | 結果 |\n|-----|------------|----------|------------|----------|\n| 1 | ... | ... | ... | □ OK<br>□ NG |"
-          PROMPT="以下はプルリクエストの変更差分です。変更差分の概略を述べて下さい。その後。この差分からQAすべきテスト項目を抽出し、必ず以下のフォーマットに従ってQA表を作成してください。フォーマットを変更せず、内容だけを適切に埋めてください：\n\n${QA_FORMAT}\n\n変更差分:\n${DIFF_CONTENT}"
+          PROMPT="以下は変更差分です。変更差分の概略を述べて下さい。その後。この差分からQAすべきテスト項目を抽出し、必ず以下のフォーマットに従ってQA表を作成してください。フォーマットを変更せず、内容だけを適切に埋めてください：\n\n${QA_FORMAT}\n\n変更差分:\n${DIFF_CONTENT}"
 
           RESPONSE=$(curl -s https://api.openai.com/v1/chat/completions \
             -H "Content-Type: application/json" \
@@ -44,8 +44,13 @@ jobs:
           echo "$QA_COMMENT" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
 
-      - name: Post QA checklist as PR comment
-        uses: peter-evans/create-or-update-comment@v1
+      - name: Save QA checklist to file
+        run: |
+          mkdir -p qa-reports
+          echo "${{ steps.generate.outputs.qa_comment }}" > qa-reports/qa-checklist-$(date +%Y%m%d-%H%M%S).md
+          
+      - name: Upload QA checklist
+        uses: actions/upload-artifact@v2
         with:
-          issue-number: ${{ github.event.pull_request.number }}
-          body: ${{ steps.generate.outputs.qa_comment }}
+          name: qa-checklist
+          path: qa-reports/
