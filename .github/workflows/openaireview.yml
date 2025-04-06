@@ -21,8 +21,16 @@ jobs:
         id: diff
         run: |
           git diff ${{ github.event.pull_request.base.sha }} ${{ github.sha }} > diff.txt
+          echo "取得した差分の長さ: $(wc -c < diff.txt) バイト"
+          echo "差分の先頭100バイト: $(head -c 100 diff.txt)"
           DIFF_CONTENT_B64=$(base64 -w 0 diff.txt)
           echo "diff_content_b64=${DIFF_CONTENT_B64}" >> $GITHUB_OUTPUT
+
+      - name: Debug - Display first and last commit SHAs
+        run: |
+          echo "Base SHA: ${{ github.event.pull_request.base.sha }}"
+          echo "Current SHA: ${{ github.sha }}"
+          echo "PR number: ${{ github.event.pull_request.number }}"
 
       - name: Generate QA checklist using OpenAI API with curl
         id: generate
@@ -30,10 +38,13 @@ jobs:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: |
           DIFF_CONTENT=$(base64 -d <<< "${{ steps.diff.outputs.diff_content_b64 }}")
+          echo "デコードした差分の長さ: $(echo "$DIFF_CONTENT" | wc -c) バイト"
           
           # プロンプトの構築
           QA_FORMAT="# QA表\n\n| No. | テスト項目 | テスト手順 | 期待結果 | 結果 |\n|-----|------------|----------|------------|----------|\n| 1 | ... | ... | ... | □ OK<br>□ NG |"
           PROMPT="以下はプルリクエストの変更差分です。変更差分の概略を述べて下さい。その後。この差分からQAすべきテスト項目を抽出し、必ず以下のフォーマットに従ってQA表を作成してください。フォーマットを変更せず、内容だけを適切に埋めてください：\n\n${QA_FORMAT}\n\n変更差分:\n${DIFF_CONTENT}"
+          
+          echo "プロンプトの長さ: $(echo "$PROMPT" | wc -c) 文字"
 
           RESPONSE=$(curl -s https://api.openai.com/v1/chat/completions \
             -H "Content-Type: application/json" \
@@ -43,12 +54,27 @@ jobs:
               "messages": [{"role": "user", "content": "'"$PROMPT"'"}],
               "temperature": 0.3
             }')
+          
+          echo "OpenAIのレスポンス全体:"
+          echo "$RESPONSE"
 
           # jqを使ってレスポンスから必要な部分を抽出
           QA_COMMENT=$(echo "$RESPONSE" | jq -r '.choices[0].message.content')
-          echo "qa_comment<<EOF" >> $GITHUB_OUTPUT
-          echo "$QA_COMMENT" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
+          echo "抽出したQAコメントの長さ: $(echo "$QA_COMMENT" | wc -c) 文字"
+          echo "QAコメントの先頭100文字: $(echo "$QA_COMMENT" | head -c 100)"
+          
+          # コメントをファイルに保存
+          echo "$QA_COMMENT" > qa_comment.txt
+          
+          # 改行を含むデータを正しく設定
+          echo 'qa_comment<<EOQA' >> $GITHUB_OUTPUT
+          cat qa_comment.txt >> $GITHUB_OUTPUT
+          echo 'EOQA' >> $GITHUB_OUTPUT
+
+      - name: Debug - Check output variables
+        run: |
+          echo "QAコメントファイルの内容確認:"
+          cat qa_comment.txt
 
       - name: Post QA checklist as PR comment
         uses: peter-evans/create-or-update-comment@v2
