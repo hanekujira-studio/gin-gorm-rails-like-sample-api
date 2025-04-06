@@ -34,46 +34,27 @@ jobs:
           echo "Current SHA: ${{ github.sha }}"
           echo "PR number: ${{ github.event.pull_request.number }}"
 
-      - name: Generate QA checklist using OpenAI API with curl
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests
+
+      - name: Generate QA checklist using Python script
         id: generate
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          DIFF_CONTENT_B64: ${{ steps.diff.outputs.diff_content_b64 }}
         run: |
-          # Base64エンコードされた差分を1KB程度に制限してデコード
-          DIFF_CONTENT=$(base64 -d <<< "${{ steps.diff.outputs.diff_content_b64 }}" | head -c 3000)
-          echo "デコードした差分の長さ: $(echo "$DIFF_CONTENT" | wc -c) バイト"
-          echo "デコードした差分の内容:"
-          echo "$DIFF_CONTENT"
+          # スクリプトに実行権限を付与
+          chmod +x .github/scripts/generate_qa.py
           
-          # サンプルのQA表
-          QA_FORMAT='# QA表\n\n| No. | テスト項目 | テスト手順 | 期待結果 | 結果 |\n|-----|------------|----------|------------|----------|\n| 1 | ... | ... | ... | □ OK<br>□ NG |'
-          
-          # プロンプトを作成
-          PROMPT="以下はプルリクエストの変更差分です。この差分からQAすべきテスト項目を抽出し、以下のフォーマットに従ってQA表を作成してください：\\n\\n${QA_FORMAT}\\n\\n変更差分:\\n${DIFF_CONTENT}"
-          
-          # エスケープされたプロンプトでリクエスト
-          RESPONSE=$(curl -s https://api.openai.com/v1/chat/completions \
-            -H "Content-Type: application/json" \
-            -H "Authorization: Bearer $OPENAI_API_KEY" \
-            -d "{\"model\":\"gpt-4o-mini-2024-07-18\",\"messages\":[{\"role\":\"user\",\"content\":\"${PROMPT}\"}],\"temperature\":0.3}")
-          
-          echo "OpenAIのレスポンス全体:"
-          echo "$RESPONSE"
-
-          # エラーチェック
-          ERROR=$(echo "$RESPONSE" | jq -r '.error.message // empty')
-          if [ -n "$ERROR" ]; then
-            echo "エラーが発生しました: $ERROR"
-            echo "自動生成されたQA表を使用します"
-            # エラーの場合はデフォルトのQA表を使用
-            QA_COMMENT="# QA表\n\n| No. | テスト項目 | テスト手順 | 期待結果 | 結果 |\n|-----|------------|----------|------------|----------|\n| 1 | 機能テスト | 変更された部分の機能を確認 | 機能が正常に動作する | □ OK<br>□ NG |"
-          else
-            # jqを使ってレスポンスから必要な部分を抽出
-            QA_COMMENT=$(echo "$RESPONSE" | jq -r '.choices[0].message.content')
-          fi
-          
-          echo "抽出したQAコメントの長さ: $(echo "$QA_COMMENT" | wc -c) 文字"
-          echo "QAコメントの先頭100文字: $(echo "$QA_COMMENT" | head -c 100)"
+          # Pythonスクリプトを実行してQA表を生成
+          QA_COMMENT=$(python .github/scripts/generate_qa.py)
           
           # コメントをファイルに保存
           echo "$QA_COMMENT" > qa_comment.txt
