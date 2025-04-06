@@ -1,8 +1,7 @@
 name: QA Checklist Generator
 
 on:
-  pull_request:
-    types: [opened, synchronize]
+  push:
 
 jobs:
   generate_qa:
@@ -10,13 +9,14 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v2
+        with:
+          fetch-depth: 0
 
       - name: Get PR diff
         id: diff
         run: |
-          git fetch master ${{ github.event.pull_request.base.ref }}
-          git diff master/${{ github.event.pull_request.base.ref }} > diff.txt
-          echo "::set-output name=diff_content::$(cat diff.txt)"
+          git diff ${{ github.event.pull_request.base.sha }} ${{ github.sha }} > diff.txt
+          echo "diff_content=$(cat diff.txt)" >> $GITHUB_OUTPUT
 
       - name: Generate QA checklist using OpenAI API with curl
         id: generate
@@ -40,7 +40,9 @@ jobs:
 
           # jqを使ってレスポンスから必要な部分を抽出
           QA_COMMENT=$(echo "$RESPONSE" | jq -r '.choices[0].message.content')
-          echo "::set-output name=qa_comment::$QA_COMMENT"
+          echo "qa_comment<<EOF" >> $GITHUB_OUTPUT
+          echo "$QA_COMMENT" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
 
       - name: Post QA checklist as PR comment
         uses: peter-evans/create-or-update-comment@v1
