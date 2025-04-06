@@ -1,0 +1,78 @@
+name: QA Checklist Generator
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+
+permissions:
+  pull-requests: write
+  contents: read
+
+jobs:
+  generate_qa:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+        with:
+          fetch-depth: 0
+
+      - name: Get PR diff
+        id: diff
+        run: |
+          git diff ${{ github.event.pull_request.base.sha }} ${{ github.sha }} > diff.txt
+          echo "取得した差分の長さ: $(wc -c < diff.txt) バイト"
+          echo "差分の内容:"
+          cat diff.txt
+          # 差分ファイルをBase64エンコード（後で使用）
+          DIFF_CONTENT_B64=$(base64 -w 0 diff.txt)
+          echo "diff_content_b64=${DIFF_CONTENT_B64}" >> $GITHUB_OUTPUT
+
+      - name: Debug - Display first and last commit SHAs
+        run: |
+          echo "Base SHA: ${{ github.event.pull_request.base.sha }}"
+          echo "Current SHA: ${{ github.sha }}"
+          echo "PR number: ${{ github.event.pull_request.number }}"
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests
+
+      - name: Generate QA checklist using Python script
+        id: generate
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          DIFF_CONTENT_B64: ${{ steps.diff.outputs.diff_content_b64 }}
+        run: |
+          # スクリプトに実行権限を付与
+          chmod +x .github/scripts/generate_qa.py
+          
+          # Pythonスクリプトを実行してQA表を生成
+          QA_COMMENT=$(python .github/scripts/generate_qa.py)
+          
+          # コメントをファイルに保存
+          echo "$QA_COMMENT" > qa_comment.txt
+          
+          # GitHub Outputsに設定
+          {
+            echo 'qa_comment<<EOQA'
+            cat qa_comment.txt
+            echo 'EOQA'
+          } >> $GITHUB_OUTPUT
+
+      - name: Debug - Check output variables
+        run: |
+          echo "QAコメントファイルの内容確認:"
+          cat qa_comment.txt
+
+      - name: Post QA checklist as PR comment
+        uses: peter-evans/create-or-update-comment@v2
+        with:
+          issue-number: ${{ github.event.pull_request.number }}
+          body: ${{ steps.generate.outputs.qa_comment }}
